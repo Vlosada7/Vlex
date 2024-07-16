@@ -11,21 +11,24 @@ interface JurisdictionState extends Jurisdiction {
 	loadingSubJurisdictions?: boolean;
 	errorLoadingSubJurisdictions?: boolean;
 	isExpanded?: boolean;
+	isChecked?: boolean;
 }
 
 const JurisdictionSelector: React.FC = () => {
-	const [jurisdictions, setJurisdictions] = useState<JurisdictionState[]>([]);
+  const [jurisdictions, setJurisdictions] = useState<JurisdictionState[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	const [selectedJurisdictionId, setSelectedJurisdictionId] = useState<
+  const [selectedJurisdictionId, setSelectedJurisdictionId] = useState<
 		number | null
 	>(null);
 
-	useEffect(() => {
+  useEffect(() => {
 		const loadJurisdictions = async () => {
 			try {
 				const data = await fetchJurisdictions();
-				setJurisdictions(data.map((j) => ({ ...j, isExpanded: false })));
+				setJurisdictions(
+					data.map((j) => ({ ...j, isExpanded: false, isChecked: false }))
+				);
 			} catch (error) {
 				setError("Error loading jurisdictions");
 			} finally {
@@ -35,7 +38,7 @@ const JurisdictionSelector: React.FC = () => {
 		loadJurisdictions();
 	}, []);
 
-	const handleJurisdictionClick = async (
+  const handleJurisdictionClick = async (
 		jurisdiction: JurisdictionState,
 		level: number
 	) => {
@@ -57,6 +60,7 @@ const JurisdictionSelector: React.FC = () => {
 						(subJurisdiction) => ({
 							...subJurisdiction,
 							isExpanded: false,
+							isChecked: false,
 						})
 					);
 				} catch (error) {
@@ -68,6 +72,7 @@ const JurisdictionSelector: React.FC = () => {
 				}
 			}
 		}
+
 		if (
 			!jurisdiction.subJurisdictions ||
 			jurisdiction.subJurisdictions.length === 0
@@ -77,8 +82,34 @@ const JurisdictionSelector: React.FC = () => {
 			} else {
 				setSelectedJurisdictionId(jurisdiction.id);
 			}
+		} else {
+			setSelectedJurisdictionId(null);
+		}
+
+		setJurisdictions([...jurisdictions]);
+	};
+
+  const handleCheckboxChange = async (
+		jurisdiction: JurisdictionState,
+		level: number
+	) => {
+		jurisdiction.isChecked = !jurisdiction.isChecked;
+		if (jurisdiction.isChecked) {
+			if (!jurisdiction.isExpanded) {
+				handleJurisdictionClick(jurisdiction, level);
+			}
+		} else {
+			collapseAll(jurisdiction);
 		}
 		setJurisdictions([...jurisdictions]);
+	};
+
+	const collapseAll = (jurisdiction: JurisdictionState) => {
+		jurisdiction.isExpanded = false;
+		jurisdiction.isChecked = false;
+		if (jurisdiction.subJurisdictions) {
+			jurisdiction.subJurisdictions.forEach((subJ) => collapseAll(subJ));
+		}
 	};
 
 	const collapseOthers = (
@@ -89,6 +120,7 @@ const JurisdictionSelector: React.FC = () => {
 	): JurisdictionState => {
 		if (currentLevel === targetLevel && jurisdiction.id !== targetId) {
 			jurisdiction.isExpanded = false;
+			collapseAll(jurisdiction); // Colapsa e desmarca todas as sub-jurisdições
 		}
 		if (jurisdiction.subJurisdictions) {
 			jurisdiction.subJurisdictions = jurisdiction.subJurisdictions.map(
@@ -98,7 +130,7 @@ const JurisdictionSelector: React.FC = () => {
 		return jurisdiction;
 	};
 
-	const getFullPath = (
+  const getFullPath = (
 		jurisdictions: JurisdictionState[],
 		targetId: number,
 		path: string[] = []
@@ -120,11 +152,16 @@ const JurisdictionSelector: React.FC = () => {
 		return null;
 	};
 
-	const handleClearSelection = () => {
+  const handleClearSelection = () => {
 		setSelectedJurisdictionId(null);
+		const updatedJurisdictions = jurisdictions.map((j) => {
+			collapseAll(j);
+			return j;
+		});
+		setJurisdictions(updatedJurisdictions);
 	};
 
-	const renderJurisdictions = (
+  const renderJurisdictions = (
 		jurisdictions: JurisdictionState[],
 		level = 0
 	) => {
@@ -135,15 +172,19 @@ const JurisdictionSelector: React.FC = () => {
 					level === 0 ? "bg-blue-100 shadow-lg w-1/2" : "bg-blue-50 ml-6"
 				}`}
 			>
-				<div
-					className="cursor-pointer flex items-center justify-between"
-					onClick={() => handleJurisdictionClick(jurisdiction, level)}
-				>
+				<div className="cursor-pointer flex items-center justify-between">
 					<div className="flex items-center">
+						<input
+							type="checkbox"
+							checked={jurisdiction.isChecked || false}
+							onChange={() => handleCheckboxChange(jurisdiction, level)}
+							className="mr-2"
+						/>
 						<span
 							className={`mr-2 transform transition-transform ${
 								jurisdiction.isExpanded ? "rotate-40" : ""
 							}`}
+							onClick={() => handleJurisdictionClick(jurisdiction, level)}
 						>
 							{jurisdiction.isExpanded ? "▼" : "▶"}
 						</span>
@@ -172,7 +213,7 @@ const JurisdictionSelector: React.FC = () => {
 		));
 	};
 
-	if (loading)
+  if (loading)
 		return (
 			<div className="flex items-center justify-center min-h-screen">
 				<LoadingSpinner />
@@ -180,11 +221,11 @@ const JurisdictionSelector: React.FC = () => {
 		);
 	if (error) return <div className="text-red-500">{error}</div>;
 
-	const selectedJurisdiction = selectedJurisdictionId
+  const selectedJurisdiction = selectedJurisdictionId
 		? getFullPath(jurisdictions, selectedJurisdictionId)
 		: null;
 
-	return (
+  return (
 		<div className="flex items-center justify-center min-h-screen relative">
 			<div className="w-full max-w-screen-lg flex flex-col items-center">
 				{renderJurisdictions(jurisdictions)}
